@@ -18,10 +18,10 @@
   //uart->dev->conf0.rxfifo_rst = 0;
   Source: https://github.com/4-20ma/ModbusMaster/issues/93
 */
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <time.h>
 #include <SoftwareSerial.h>
-
-
-
 #include <ModbusMaster.h>
 
 //HardwareSerial Pzemserial(2);
@@ -31,7 +31,104 @@
 
 #define MAX485_DE      5  // We're using a MAX485-compatible RS485 Transceiver. The Data Enable and Receiver Enable pins are hooked up as follows:
 #define MAX485_RE_NEG  6
+const char* ssid = "ideothaphra 2.4G";
+const char* password = "idti020528885";
 
+// MQTT Broker
+const char* mqtt_server = "broker.netpie.io";
+const int   mqtt_port   = 1883; 
+const char* mqtt_client = "b58c4072-8091-4d7e-ad9d-2d40eedeeb5a"; // Replace with your MQTT client ID
+const char* mqtt_user   = "3vtGCzBHyQWkyjuaj2Uqdbz9L7TEbjmY"; // Replace with your MQTT username
+const char* mqtt_pass   = "Gzx367ABWzfvHwhfpfiAqu6PRJcsRHH9"; // Replace with your MQTT password
+// MQTT Topic
+const char* mqtt_topic  = "@msg/sensor"; 
+
+// SenserID
+//const int sensor_id = 1;
+// Initial relative humidity value
+
+// MQTT Client
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// Time (NTP) - Bangkok Timezone (UTC+7)
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 7 * 3600;
+const int daylightOffset_sec = 0;
+
+void setup_wifi() {
+  /*
+  This function connects the ESP32 to the specified WiFi network.
+  It prints the connection status to the Serial Monitor.
+  It will block until the connection is established.
+  If the connection fails, it will retry every 500 milliseconds.
+  The SSID and password are defined at the top of the file.
+  */
+  delay(10);
+  Serial.println();
+  Serial.printf("Connecting to %s\n", ssid);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected.");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnect_mqtt() {
+  /*
+  This function attempts to connect to the MQTT broker.
+  It will block until the connection is established.
+  If the connection fails, it will retry every 5 seconds.
+  The MQTT server, port, client ID, username, and password are defined at the top of the file.
+  */
+
+  // Loop until connected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    
+    if (client.connect(mqtt_client, mqtt_user, mqtt_pass)) {
+      // Successfully connected to the MQTT broker
+      Serial.println("connected");
+
+    } else {
+      // Failed to connect to the MQTT broker
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" trying again in 5 seconds");
+      delay(5000);
+    }
+  }
+}
+
+void setup_time() {
+  /*
+  This function sets up the NTP client to synchronize the time.
+  It uses the NTP server defined at the top of the file.
+  It sets the timezone to UTC+7 (Bangkok time).
+  It will block until the time is synchronized.
+  The GMT offset and daylight offset are defined at the top of the file.
+  */
+
+  Serial.println("Setting up NTP time synchronization...");
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.print("Waiting for NTP time sync...");
+  time_t now = time(nullptr);
+  while (now < 8 * 3600 * 2) {
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+  }
+  Serial.println("\nTime synced.");
+
+  struct tm timeinfo;
+  gmtime_r(&now, &timeinfo);
+  Serial.printf("Current time (UTC+7): %s", asctime(&timeinfo));
+}
 SoftwareSerial Pzemserial(RXD2, TXD2); 
 
 ModbusMaster node;
@@ -105,6 +202,10 @@ void changeAddress(uint8_t OldslaveAddr, uint8_t NewslaveAddr)  //Change the sla
 void setup() {
   Pzemserial.begin(9600);  // Note the format for setting a serial port is as follows: Serial2.begin(baud-rate, protocol, RX pin, TX pin);
   Serial.begin(9600);
+  setup_wifi();
+  client.setServer(mqtt_server, mqtt_port);
+  reconnect_mqtt();
+  setup_time();
   node.begin(pzemSlaveAddr, Pzemserial);  //Start the Modbusmaster
 
   pinMode(MAX485_RE_NEG, OUTPUT);  // Setting up the RS485 transceivers
@@ -142,60 +243,134 @@ void setup() {
   0x0009  Alarm status  0xFFFF is alarm，0x0000is not alarm
 */
 
-void loop() {
-  uint8_t result;
+  void loop() {
+    uint8_t result;
 
-  for (pzemSlaveAddr = 1; pzemSlaveAddr < 3; pzemSlaveAddr++) {  // Loop all the Pzem sensors
-//    node.slaveid(pzemSlaveAddr);          //Switch to another slave address. NOTE: You can only use this function is you have modified the ModbusMaster library (Or get the copy from my website)
-    Serial.print("Pzem Slave ");
-    Serial.print(pzemSlaveAddr);
-    Serial.print(": ");
-   
-    result = node.readInputRegisters(0x0000, 9); //read the 9 registers of the PZEM-014 / 016
-    if (result == node.ku8MBSuccess)
-    {
-      uint32_t tempdouble = 0x00000000;
+    // ประกาศตัวแปรการวัดทั้งหมดในขอบเขตที่กว้างขึ้น
+    // กำหนดค่าเริ่มต้นเป็น 0.0 หรือค่าเริ่มต้นที่เหมาะสม
+    float voltage = 0.0;
+    float current = 0.0;
+    float power = 0.0;
+    float energy = 0.0;
+    float hz = 0.0;
+    float pf = 0.0;
 
-      float voltage = node.getResponseBuffer(0x0000) / 10.0;  //get the 16bit value for the voltage, divide it by 10 and cast in the float variable 
+    // ตัวแปร `tempdouble` นี้ก็ต้องประกาศนอกบล็อก if ด้วยเช่นกัน
+    // หากคุณต้องการใช้มันข้ามการวนซ้ำหรือในภายหลังในลูป
+    // แต่เนื่องจากมันถูกใช้เฉพาะภายในบล็อก if สำหรับการคำนวณเท่านั้น
+    // การประกาศเป็น `uint32_t tempdouble = 0x00000000;` ภายในบล็อก if ก็ใช้ได้
+    // อย่างไรก็ตาม เพื่อความสอดคล้องกันและหลีกเลี่ยงปัญหาที่อาจเกิดขึ้นหากมีการใช้งานเพิ่มขึ้น
+    // การประกาศมันพร้อมกับตัวอื่นๆ มักเป็นวิธีปฏิบัติที่ดี
+    // สำหรับโค้ดนี้ การเก็บ `uint32_t tempdouble = 0x00000000;` ไว้ข้างในบล็อก `if`
+    // จริงๆ แล้วก็ใช้ได้ เพราะมันจะถูกกำหนดค่าใหม่ในการอ่านแต่ละครั้ง
+    // ตอนนี้เราจะเก็บมันไว้ข้างในก่อน แต่ให้ระวังเรื่องขอบเขตของมันด้วย
+    uint32_t tempdouble = 0x00000000; // ย้ายการประกาศ tempdouble มาที่นี่
 
-      tempdouble =  (node.getResponseBuffer(0x0002) << 16) + node.getResponseBuffer(0x0001);  // Get the 2 16bits registers and combine them to an unsigned 32bit
-      float current = tempdouble / 1000.00;   // Divide the unsigned 32bit by 1000 and put in the current float variable 
+    for (pzemSlaveAddr = 1; pzemSlaveAddr < 3; pzemSlaveAddr++) { // วนลูป PZEM เซ็นเซอร์ทั้งหมด
+      Serial.print("Pzem Slave ");
+      Serial.print(pzemSlaveAddr);
+      Serial.print(": ");
 
-      tempdouble =  (node.getResponseBuffer(0x0004) << 16) + node.getResponseBuffer(0x0003);
-      float power = tempdouble / 10.0;
+      result = node.readInputRegisters(0x0000, 9); // อ่าน 9 registers ของ PZEM-014 / 016
+      if (result == node.ku8MBSuccess) {
+        // tempdouble ถูกประกาศและกำหนดค่าที่นี่
+        // uint32_t tempdouble = 0x00000000; // บรรทัดนี้ไม่จำเป็นแล้ว เพราะประกาศไว้ด้านบนแล้ว
 
-      tempdouble =  (node.getResponseBuffer(0x0006) << 16) + node.getResponseBuffer(0x0005);
-      float energy = tempdouble;
+        voltage = node.getResponseBuffer(0x0000) / 10.0;
+        tempdouble = (node.getResponseBuffer(0x0002) << 16) + node.getResponseBuffer(0x0001);
+        current = tempdouble / 1000.00;
+        tempdouble = (node.getResponseBuffer(0x0004) << 16) + node.getResponseBuffer(0x0003);
+        power = tempdouble / 10.0;
+        tempdouble = (node.getResponseBuffer(0x0006) << 16) + node.getResponseBuffer(0x0005);
+        energy = tempdouble;
+        hz = node.getResponseBuffer(0x0007) / 10.0;
+        pf = node.getResponseBuffer(0x0008) / 100.00;
 
-      float hz = node.getResponseBuffer(0x0007) / 10.0;
-      float pf = node.getResponseBuffer(0x0008) / 100.00;
+        //Serial.print(voltage, 1);
+       // Serial.print("V   ");
+        //Serial.print(hz, 1);
+        //Serial.print("Hz   ");
+        //Serial.print(current, 3);
+        //Serial.print("A   ");
+        //Serial.print(power, 1);
+        //Serial.print("W  ");
+        //Serial.print(pf, 2);
+        //Serial.print("pf   ");
+        //Serial.print(energy, 0);
+        //Serial.print("Wh  ");
+        //Serial.println();
+        if (pzemSlaveAddr == 2) {
+          //Serial.println();
+        }
+      } else {
+        Serial.println("Failed to read modbus");
+        // พิจารณาว่าค่า voltage, current ฯลฯ ควรเป็นเท่าไหร่หากอ่านล้มเหลว
+        // พวกมันจะยังคงเป็นค่าเดิม (จากการอ่านที่สำเร็จ) หรือ
+        // ค่าเริ่มต้น 0.0 หากเป็นการล้มเหลวครั้งแรก
+        // คุณอาจต้องการตั้งค่าเป็นค่าผิดพลาดเฉพาะ หรือข้ามการ publish MQTT
+        // สำหรับการวนซ้ำนี้หากการอ่านล้มเหลว
+        // เพื่อให้มั่นใจว่าไม่ได้ส่งค่าที่ไม่ถูกต้อง ให้ตั้งค่าตัวแปรเป็น 0.0 หรือค่าที่บ่งชี้ว่าไม่สำเร็จ
+        voltage = 0.0;
+        current = 0.0;
+        power = 0.0;
+        energy = 0.0;
+        hz = 0.0;
+        pf = 0.0;
+      }
+      // delay(1000); // หากต้องการดีเลย์ระหว่างการอ่านแต่ละ slave ให้คงไว้
+    } // สิ้นสุด for loop
 
-      Serial.print(voltage, 1);  // Print Voltage with 1 decimal
-      Serial.print("V   ");
-
-      Serial.print(hz, 1);
-      Serial.print("Hz   ");
-
-      Serial.print(current, 3);
-      Serial.print("A   ");
-
-      Serial.print(power, 1);
-      Serial.print("W  ");
-
-      Serial.print(pf, 2);
-      Serial.print("pf   ");
-
-      Serial.print(energy, 0);
-      Serial.print("Wh  ");
-      Serial.println();
-      if (pzemSlaveAddr==2){Serial.println(); }
-    } else
-    {
-      Serial.println("Failed to read modbus");
-    }
+    // ดีเลย์รวมหลังจากอ่าน PZEM ทั้งหมดแล้ว (หรือจะเอาไว้ข้างใน for loop ถ้าต้องการดีเลย์ต่อ PZEM)
     delay(1000);
+
+    if (!client.connected()) {
+      reconnect_mqtt();
+    }
+    client.loop();
+
+    // ตัวแปร static unsigned long lastPublish ควรอยู่นอก for loop
+    // เพื่อให้เป็นตัวจับเวลาการ publish ทั่วไป
+    static unsigned long lastPublish = 0;
+
+    // --- LOGIC การ PUBLISH MQTT (ย้ายมาอยู่นอก 'for' loop เพื่อให้มีการ publish เพียงครั้งเดียวต่อรอบ
+    // --- โดยใช้ข้อมูลจาก PZEM Slave ตัวสุดท้ายที่อ่านได้สำเร็จ
+    // --- หากคุณต้องการ publish แยกตาม PZEM Slave ให้ย้ายบล็อกนี้เข้าไปใน 'for' loop
+    // --- แต่ต้องแน่ใจว่าอยู่หลังบล็อก 'if (result == node.ku8MBSuccess)' ซึ่งเป็นที่ที่ตัวแปรถูกกำหนดค่า) ---
+
+    // ตรวจสอบว่าถึงเวลา publish หรือยัง
+    if (millis() - lastPublish > 1000) {
+      // Get the current time
+      time_t now = time(nullptr);
+      struct tm timeinfo;
+      localtime_r(&now, &timeinfo);
+
+      // Format the time as a string
+      char timeStr[64];
+      strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S+07", &timeinfo);
+
+      // กำหนด sensor_id ที่จะใช้
+      // เนื่องจากลูป pzemSlaveAddr จะรันจาก 1 ถึง 2 (ไม่ถึง 3)
+      // ถ้าคุณต้องการส่งข้อมูลของ PZEM แต่ละตัวแยกกัน
+      // คุณอาจต้องให้ MQTT publish block อยู่ภายใน for loop
+      // และใช้ pzemSlaveAddr เป็น sensor_id
+      // แต่ถ้าคุณอยากส่งข้อมูลรวม หรือข้อมูลของ PZEM ตัวสุดท้ายที่อ่านได้
+      // แล้วใช้ sensor_id คงที่ หรือกำหนดเองได้
+      int sensor_id = 1; // ตัวอย่าง: กำหนด sensor_id เป็น 1 หรือตามที่ต้องการ
+
+      // Build JSON payload
+      char payload[256];
+      snprintf(payload, sizeof(payload),
+              "{\"time\": \"%s\", \"sensor_id\": %d, \"voltage\": %.2f, \"current\": %.2f, \"power\": %.2f, \"energy\": %.2f, \"hz\": %.2f, \"pf\": %.2f}",
+              timeStr, sensor_id, voltage, current, power, energy, hz, pf); // <-- hz และ pf สามารถเข้าถึงได้แล้ว
+
+      // Print to Serial Monitor
+      Serial.println("Publishing data to MQTT:");
+      Serial.println(payload);
+
+      // Publish the payload to the MQTT topic
+      client.publish(mqtt_topic, payload);
+
+      lastPublish = millis();
+    }
   }
-
-}
-
 
