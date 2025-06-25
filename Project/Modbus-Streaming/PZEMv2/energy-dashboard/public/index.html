@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Dashboard</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link href="css/custom.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="text-center mb-4 mt-3">Energy Dashboard</h1>
+        
+        <!-- Status Card -->
+        <div class="row mb-4">
+            <div class="col-12 col-md-12 mb-3">
+                <div class="card status-card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title connection-status-title">สถานะการเชื่อมต่อ</h5>
+                        <span id="connectionStatus" class="badge badge-secondary">กำลังเชื่อมต่อ...</span>
+                        <small class="text-muted d-block mt-2">อัพเดทล่าสุด: <span id="lastUpdate">-</span></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Energy Metrics Cards -->
+        <div class="row mb-4">
+            <div class="col-sm-6 col-md-3 mb-3">
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">แรงดันไฟฟ้า</h6>
+                        <h3 class="metric-value" id="voltage">0</h3>
+                        <small class="text-muted">โวลท์ (V)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-md-3 mb-3">
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">กระแสไฟฟ้า</h6>
+                        <h3 class="metric-value" id="current">0</h3>
+                        <small class="text-muted">แอมแปร์ (A)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-md-3 mb-3">
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">กำลังไฟฟ้า</h6>
+                        <h3 class="metric-value" id="power">0</h3>
+                        <small class="text-muted">วัตต์ (W)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card metric-card energy-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">พลังงานรวม</h6>
+                        <h3 class="metric-value" id="energy">0</h3>
+                        <small class="text-muted">วัตต์-ชั่วโมง (Wh)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secondary Metrics -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">ความถี่</h6>
+                        <h3 class="metric-value" id="frequency">0</h3>
+                        <small class="text-muted">เฮิรตซ์ (Hz)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">ค่า Power Factor</h6>
+                        <h3 class="metric-value" id="powerFactor">0</h3>
+                        <small class="text-muted">PF</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reset Energy Section -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card reset-card">
+                    <div class="card-body">
+                        <h5 class="card-title text-center mb-4">รีเซ็ตค่าพลังงาน</h5>
+                        <form id="resetForm">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="username" class="form-label">ชื่อผู้ใช้</label>
+                                    <input type="text" class="form-control" id="username" required>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="password" class="form-label">รหัสผ่าน</label>
+                                    <input type="password" class="form-control" id="password" required>
+                                </div>
+                                <div class="col-md-4 mb-3 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-danger w-100" id="resetBtn">
+                                        รีเซ็ตพลังงาน
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="resetMessage" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

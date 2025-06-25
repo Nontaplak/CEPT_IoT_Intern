@@ -1,0 +1,44 @@
+**Tasks**
+--Reset energy part
+--Collect user data and admin id
+--Separate web pages
+
+**How to**
+    1.Connect PZEM-016 --> ESP32 and run Timescale db in docker
+    2.*src\main.cpp* --> Read Energy-meter and publish MQTT to NETPIE "esp-32"
+    3.*insert db\insertcode* --> Insert data to timescale db "localhost:30000"
+    4.Command "node server.js" on bash ..PZEMv2\energy-dashboard> 
+    5.Open browser "http://localhost:3000/" or "IP-ADDRESS:3000/"
+
+__Note__
+Reset require; admin:password
+"http://localhost:3000/api/test-db" ; check database-connection log
+
+_Explain_
+    server.js                    ; Open Server and set Web/API
+    .env                         ; Source of config
+    config\database.js           ; Connect TimescaleDB 
+    middleware\auth.js           ; Authenticaation ex.reset energy
+    routes\api.js                ; set GET/POST...
+    public\index.html            ; Dashboard Template
+    public\css\bootstrap.min.css ; Grid layout,class,butyon
+    public\css\custom.css        ; Dashboard Decorate
+    public\js\dashboard.js       ; Connect websocket
+    public\js\socket.io.js       ; Auto-loaded from socket.io server
+
+
+    /project-root
+    │
+    ├── server.js           <-- ตัวเริ่มต้นเซิร์ฟเวอร์ (Express + Socket.IO)
+    /config
+    │   └── database.js     <-- ตั้งค่าการเชื่อมต่อฐานข้อมูล (PostgreSQL)
+    /middleware
+    │   └── auth.js         <-- ตัวตรวจสอบสิทธิ์ (middleware สำหรับ API ที่ต้องล็อกอิน)
+    /routes
+    │   └── api.js          <-- ตัวจัดการ API ต่าง ๆ เช่น ดึงข้อมูล sensor, รีเซ็ตพลังงาน
+    /public
+    │   ├── index.html      <-- หน้า Dashboard (Frontend HTML)
+    /public/js
+    │   └── dashboard.js    <-- โค้ด JavaScript ด้านหน้า (เชื่อมต่อ API / WebSocket)
+    /public/css
+        └── custom.css      <-- สไตล์ CSS สำหรับ Dashboard

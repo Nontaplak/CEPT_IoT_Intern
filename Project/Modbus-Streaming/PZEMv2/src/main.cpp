@@ -31,8 +31,8 @@
 
 #define MAX485_DE      5  // We're using a MAX485-compatible RS485 Transceiver. The Data Enable and Receiver Enable pins are hooked up as follows:
 #define MAX485_RE_NEG  6
-const char* ssid = "ideothaphra 2.4G";
-const char* password = "idti020528885";
+const char* ssid = "intania501_2.4G";
+const char* password = "0818404328";
 
 // MQTT Broker
 const char* mqtt_server = "broker.netpie.io";
