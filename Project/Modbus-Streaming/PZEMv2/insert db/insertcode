@@ -18,26 +18,41 @@ MQTT_TOPIC = "@msg/sensor"
 MQTT_CLIENT = "d97def3d-de68-4c6e-83cd-394d2ebc1a18"
 MQTT_USER = "11Mn1dSEx2Ujjn9TM24732PGfBEHkgic"
 MQTT_PASS = "ZCdhpq9TUq3mre6bYKBSVDZqLKAcnxUf"
-
+zero_counter = 0  # นับจำนวนครั้งที่ค่าทั้งหมดเป็นศูนย์
 # MQTT Callback
 def on_connect(client, userdata, flags, rc, properties=None):
     print("Connected with result code " + str(rc))
     client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
+    global zero_streak
     try:
         payload = json.loads(msg.payload.decode())
         print(f"[📨] Received: {payload}")
 
-        data = (
-            payload["time"],
-            payload["sensor_id"],
+        values = [
             payload["voltage"],
             payload["current"],
             payload["power"],
             payload["energy"],
             payload["hz"],
             payload["pf"]
+        ]
+
+        if all(v == 0 for v in values):
+            zero_streak += 1
+            if zero_streak < 3:
+                print(f"[⚠] Skipped 0-set ({zero_streak}/3)")
+                return
+            elif zero_streak == 3:
+                print("[✔] 0 appeared 3 times in a row — now logging.")
+        else:
+            zero_streak = 0  # reset streak เมื่อมีค่าปกติ
+
+        data = (
+            payload["time"],
+            payload["sensor_id"],
+            *values
         )
 
         with psycopg2.connect(CONNECTION) as conn:

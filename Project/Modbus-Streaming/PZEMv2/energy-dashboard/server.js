@@ -24,6 +24,28 @@ const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 const io = socketIo(server); // <-- จะใช้กับ dashboard.js
 
+// Middleware สำหรับจัดการ IP address
+app.use((req, res, next) => {
+    // ได้ real IP address ถึงแม้จะผ่าน proxy
+    req.realIP = req.headers['x-forwarded-for'] || 
+                 req.headers['x-real-ip'] || 
+                 req.connection.remoteAddress || 
+                 req.socket.remoteAddress ||
+                 (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                 req.ip ||
+                 'unknown';
+    
+    // ถ้ามี multiple IPs (ผ่าน proxy หลายชั้น) ให้เอาตัวแรก
+    if (req.realIP.includes(',')) {
+        req.realIP = req.realIP.split(',')[0].trim();
+    }
+    
+    next();
+});
+
+// ถ้าใช้ express ใหม่ๆ ให้เพิ่ม trust proxy
+app.set('trust proxy', true);
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -49,6 +71,7 @@ app.use((err, req, res, next) => {
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
+
 
 // ✅ Real-time data push
 io.on('connection', (socket) => {

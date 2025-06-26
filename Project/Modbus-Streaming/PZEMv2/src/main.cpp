@@ -23,7 +23,7 @@
 #include <time.h>
 #include <SoftwareSerial.h>
 #include <ModbusMaster.h>
-
+#include <ArduinoJson.h>
 //HardwareSerial Pzemserial(2);
 
 #define RXD2 3 //Gpio pins Serial2
@@ -42,7 +42,7 @@ const char* mqtt_user   = "3vtGCzBHyQWkyjuaj2Uqdbz9L7TEbjmY"; // Replace with yo
 const char* mqtt_pass   = "Gzx367ABWzfvHwhfpfiAqu6PRJcsRHH9"; // Replace with your MQTT password
 // MQTT Topic
 const char* mqtt_topic  = "@msg/sensor"; 
-
+const char* mqtt_topic_cmd   = "@msg/commands";
 // SenserID
 //const int sensor_id = 1;
 // Initial relative humidity value
@@ -56,6 +56,10 @@ const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 7 * 3600;
 const int daylightOffset_sec = 0;
 
+String getTimeString() {
+  unsigned long currentTime = millis();
+  return String(currentTime);
+}
 void setup_wifi() {
   /*
   This function connects the ESP32 to the specified WiFi network.
@@ -78,6 +82,41 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
+// Function prototype for resetEnergy
+void resetEnergy(uint8_t slaveAddr);
+
+void mqtt_callback(char* topic, byte* payload, unsigned int length) {
+  // Convert payload to string
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  
+  // Parse JSON - using new JsonDocument instead of DynamicJsonDocument
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, message);
+  
+  if (error) {
+    Serial.print("JSON parsing failed: ");
+    Serial.println(error.c_str());
+    return;
+  }
+  
+  // Your existing logic here...
+  int sensor_id = doc["sensor_id"];
+  
+  if (doc["command"] == "reset_energy") {
+    resetEnergy((uint8_t)sensor_id); // Now this function exists
+    
+    // Send confirmation
+    String response = "{\"sensor_id\":" + 
+                     String(sensor_id) + ",\"timestamp\":\"" + 
+                     getTimeString() + "\"}"; // Now this function exists
+    
+    client.publish("energy/response", response.c_str());
+  }
+}
+
 void reconnect_mqtt() {
   /*
   This function attempts to connect to the MQTT broker.
@@ -94,6 +133,9 @@ void reconnect_mqtt() {
     if (client.connect(mqtt_client, mqtt_user, mqtt_pass)) {
       // Successfully connected to the MQTT broker
       Serial.println("connected");
+
+      client.subscribe(mqtt_topic_cmd);
+      Serial.println("Subscribed to command topic");
 
     } else {
       // Failed to connect to the MQTT broker
@@ -155,6 +197,7 @@ void resetEnergy(uint8_t slaveAddr)    //Reset the slave's energy counter
   u16CRC = crc16_update(u16CRC, resetCommand);
   Serial.println("Resetting Energy");
   preTransmission();
+  Serial.println("Resetting energy for sensor: " + String(slaveAddr));
   Pzemserial.write(slaveAddr);
   Pzemserial.write(resetCommand);
   Pzemserial.write(lowByte(u16CRC));
@@ -204,6 +247,7 @@ void setup() {
   Serial.begin(9600);
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(mqtt_callback); 
   reconnect_mqtt();
   setup_time();
   node.begin(pzemSlaveAddr, Pzemserial);  //Start the Modbusmaster

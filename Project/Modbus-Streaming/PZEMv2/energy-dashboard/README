@@ -1,9 +1,10 @@
 **Tasks**
---Reset energy part
---Collect user data and admin id
---Separate web pages
+--> Collect real ip
+--> Error route reset_logs
+--> Separate web pages
 
-**How to**
+**How to** 
+    0.Add Table in **TimescaleDB** for first time
     1.Connect PZEM-016 --> ESP32 and run Timescale db in docker
     2.*src\main.cpp* --> Read Energy-meter and publish MQTT to NETPIE "esp-32"
     3.*insert db\insertcode* --> Insert data to timescale db "localhost:30000"
@@ -42,3 +43,26 @@ _Explain_
     │   └── dashboard.js    <-- โค้ด JavaScript ด้านหน้า (เชื่อมต่อ API / WebSocket)
     /public/css
         └── custom.css      <-- สไตล์ CSS สำหรับ Dashboard
+
+-
+
+**Timescale db** __Now ignore 0 value streak < 3__
+-- Create table for logging reset energy commands--
+CREATE TABLE IF NOT EXISTS reset_logs (
+    id SERIAL PRIMARY KEY,
+    sensor_id INTEGER NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    request_id BIGINT NOT NULL,
+    status VARCHAR(20) DEFAULT 'sent',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create index for faster queries--
+CREATE INDEX IF NOT EXISTS idx_reset_logs_sensor_timestamp 
+ON reset_logs(sensor_id, timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_reset_logs_request_id 
+ON reset_logs(request_id);
+
+ 
