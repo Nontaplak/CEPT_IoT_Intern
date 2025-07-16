@@ -18,7 +18,7 @@
   //uart->dev->conf0.rxfifo_rst = 0;
   Source: https://github.com/4-20ma/ModbusMaster/issues/93
 */
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <PubSubClient.h>
 #include <time.h>
 #include <SoftwareSerial.h>
@@ -26,11 +26,11 @@
 
 //HardwareSerial Pzemserial(2);
 
-#define RXD2 D1 //Gpio pins Serial2
-#define TXD2 D2
+#define RXD2 32 //Gpio pins Serial2
+#define TXD2 25
 
-#define MAX485_DE      D3  // We're using a MAX485-compatible RS485 Transceiver. The Data Enable and Receiver Enable pins are hooked up as follows:
-#define MAX485_RE_NEG  D4
+#define MAX485_DE      33  // We're using a MAX485-compatible RS485 Transceiver. The Data Enable and Receiver Enable pins are hooked up as follows:
+#define MAX485_RE_NEG  26
 const char* ssid = "CEPT R&D";
 const char* password = "cept_chula";
 
