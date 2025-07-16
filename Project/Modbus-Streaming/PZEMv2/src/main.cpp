@@ -18,31 +18,31 @@
   //uart->dev->conf0.rxfifo_rst = 0;
   Source: https://github.com/4-20ma/ModbusMaster/issues/93
 */
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <time.h>
 #include <SoftwareSerial.h>
 #include <ModbusMaster.h>
-#include <ArduinoJson.h>
+
 //HardwareSerial Pzemserial(2);
 
-#define RXD2 3 //Gpio pins Serial2
-#define TXD2 4
+#define RXD2 D1 //Gpio pins Serial2
+#define TXD2 D2
 
-#define MAX485_DE      5  // We're using a MAX485-compatible RS485 Transceiver. The Data Enable and Receiver Enable pins are hooked up as follows:
-#define MAX485_RE_NEG  6
-const char* ssid = "intania501_2.4G";
-const char* password = "0818404328";
+#define MAX485_DE      D3  // We're using a MAX485-compatible RS485 Transceiver. The Data Enable and Receiver Enable pins are hooked up as follows:
+#define MAX485_RE_NEG  D4
+const char* ssid = "CEPT R&D";
+const char* password = "cept_chula";
 
 // MQTT Broker
-const char* mqtt_server = "broker.netpie.io";
+const char* mqtt_server = "192.168.0.72";
 const int   mqtt_port   = 1883; 
-const char* mqtt_client = "b58c4072-8091-4d7e-ad9d-2d40eedeeb5a"; // Replace with your MQTT client ID
-const char* mqtt_user   = "3vtGCzBHyQWkyjuaj2Uqdbz9L7TEbjmY"; // Replace with your MQTT username
-const char* mqtt_pass   = "Gzx367ABWzfvHwhfpfiAqu6PRJcsRHH9"; // Replace with your MQTT password
+const char* mqtt_client = "pzem"; // Replace with your MQTT client ID
+const char* mqtt_user   = "pzem"; // Replace with your MQTT username
+const char* mqtt_pass   = "cept_chula"; // Replace with your MQTT password
 // MQTT Topic
 const char* mqtt_topic  = "@msg/sensor"; 
-const char* mqtt_topic_cmd   = "@msg/commands";
+
 // SenserID
 //const int sensor_id = 1;
 // Initial relative humidity value
@@ -56,10 +56,6 @@ const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 7 * 3600;
 const int daylightOffset_sec = 0;
 
-String getTimeString() {
-  unsigned long currentTime = millis();
-  return String(currentTime);
-}
 void setup_wifi() {
   /*
   This function connects the ESP32 to the specified WiFi network.
@@ -82,41 +78,6 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-// Function prototype for resetEnergy
-void resetEnergy(uint8_t slaveAddr);
-
-void mqtt_callback(char* topic, byte* payload, unsigned int length) {
-  // Convert payload to string
-  String message = "";
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  
-  // Parse JSON - using new JsonDocument instead of DynamicJsonDocument
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, message);
-  
-  if (error) {
-    Serial.print("JSON parsing failed: ");
-    Serial.println(error.c_str());
-    return;
-  }
-  
-  // Your existing logic here...
-  int sensor_id = doc["sensor_id"];
-  
-  if (doc["command"] == "reset_energy") {
-    resetEnergy((uint8_t)sensor_id); // Now this function exists
-    
-    // Send confirmation
-    String response = "{\"sensor_id\":" + 
-                     String(sensor_id) + ",\"timestamp\":\"" + 
-                     getTimeString() + "\"}"; // Now this function exists
-    
-    client.publish("energy/response", response.c_str());
-  }
-}
-
 void reconnect_mqtt() {
   /*
   This function attempts to connect to the MQTT broker.
@@ -133,9 +94,6 @@ void reconnect_mqtt() {
     if (client.connect(mqtt_client, mqtt_user, mqtt_pass)) {
       // Successfully connected to the MQTT broker
       Serial.println("connected");
-
-      client.subscribe(mqtt_topic_cmd);
-      Serial.println("Subscribed to command topic");
 
     } else {
       // Failed to connect to the MQTT broker
@@ -197,7 +155,6 @@ void resetEnergy(uint8_t slaveAddr)    //Reset the slave's energy counter
   u16CRC = crc16_update(u16CRC, resetCommand);
   Serial.println("Resetting Energy");
   preTransmission();
-  Serial.println("Resetting energy for sensor: " + String(slaveAddr));
   Pzemserial.write(slaveAddr);
   Pzemserial.write(resetCommand);
   Pzemserial.write(lowByte(u16CRC));
@@ -247,7 +204,6 @@ void setup() {
   Serial.begin(9600);
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(mqtt_callback); 
   reconnect_mqtt();
   setup_time();
   node.begin(pzemSlaveAddr, Pzemserial);  //Start the Modbusmaster
@@ -291,6 +247,7 @@ void setup() {
     uint8_t result;
 
     // ประกาศตัวแปรการวัดทั้งหมดในขอบเขตที่กว้างขึ้น
+    // กำหนดค่าเริ่มต้นเป็น 0.0 หรือค่าเริ่มต้นที่เหมาะสม
     float voltage = 0.0;
     float current = 0.0;
     float power = 0.0;
@@ -298,12 +255,18 @@ void setup() {
     float hz = 0.0;
     float pf = 0.0;
 
-    // ตัวแปร static สำหรับการนับค่า 0 ต่อเนื่อง
-    static int zero_streak = 0;
+    // ตัวแปร `tempdouble` นี้ก็ต้องประกาศนอกบล็อก if ด้วยเช่นกัน
+    // หากคุณต้องการใช้มันข้ามการวนซ้ำหรือในภายหลังในลูป
+    // แต่เนื่องจากมันถูกใช้เฉพาะภายในบล็อก if สำหรับการคำนวณเท่านั้น
+    // การประกาศเป็น `uint32_t tempdouble = 0x00000000;` ภายในบล็อก if ก็ใช้ได้
+    // อย่างไรก็ตาม เพื่อความสอดคล้องกันและหลีกเลี่ยงปัญหาที่อาจเกิดขึ้นหากมีการใช้งานเพิ่มขึ้น
+    // การประกาศมันพร้อมกับตัวอื่นๆ มักเป็นวิธีปฏิบัติที่ดี
+    // สำหรับโค้ดนี้ การเก็บ `uint32_t tempdouble = 0x00000000;` ไว้ข้างในบล็อก `if`
+    // จริงๆ แล้วก็ใช้ได้ เพราะมันจะถูกกำหนดค่าใหม่ในการอ่านแต่ละครั้ง
+    // ตอนนี้เราจะเก็บมันไว้ข้างในก่อน แต่ให้ระวังเรื่องขอบเขตของมันด้วย
+    uint32_t tempdouble = 0x00000000; // ย้ายการประกาศ tempdouble มาที่นี่
 
-    uint32_t tempdouble = 0x00000000;
-
-    for (pzemSlaveAddr = 1; pzemSlaveAddr < 2; pzemSlaveAddr++) { // วนลูป PZEM เซ็นเซอร์ทั้งหมด
+    for (pzemSlaveAddr = 1; pzemSlaveAddr < 3; pzemSlaveAddr++) { // วนลูป PZEM เซ็นเซอร์ทั้งหมด
       Serial.print("Pzem Slave ");
       Serial.print(pzemSlaveAddr);
       Serial.print(": ");
@@ -341,32 +304,17 @@ void setup() {
     }
     client.loop();
 
+    // ตัวแปร static unsigned long lastPublish ควรอยู่นอก for loop
+    // เพื่อให้เป็นตัวจับเวลาการ publish ทั่วไป
     static unsigned long lastPublish = 0;
+
+    // --- LOGIC การ PUBLISH MQTT (ย้ายมาอยู่นอก 'for' loop เพื่อให้มีการ publish เพียงครั้งเดียวต่อรอบ
+    // --- โดยใช้ข้อมูลจาก PZEM Slave ตัวสุดท้ายที่อ่านได้สำเร็จ
+    // --- หากคุณต้องการ publish แยกตาม PZEM Slave ให้ย้ายบล็อกนี้เข้าไปใน 'for' loop
+    // --- แต่ต้องแน่ใจว่าอยู่หลังบล็อก 'if (result == node.ku8MBSuccess)' ซึ่งเป็นที่ที่ตัวแปรถูกกำหนดค่า) ---
 
     // ตรวจสอบว่าถึงเวลา publish หรือยัง
     if (millis() - lastPublish > 1000) {
-      
-      // ตรวจสอบว่าค่าทั้งหมดเป็น 0 หรือไม่
-      bool all_zero = (voltage == 0.0 && current == 0.0 && power == 0.0 && 
-                       energy == 0.0 && hz == 0.0 && pf == 0.0);
-      
-      if (all_zero) {
-        zero_streak++;
-        if (zero_streak < 3) {
-          Serial.print("[⚠] Skipped 0-set (");
-          Serial.print(zero_streak);
-          Serial.println("/3)");
-          lastPublish = millis(); // อัปเดต lastPublish เพื่อไม่ให้ค้างในลูป
-          return; // ข้ามการส่งข้อมูล
-        } else if (zero_streak == 3) {
-          Serial.println("[✔] 0 appeared 3 times in a row — now logging.");
-          // จะส่งข้อมูลต่อไป
-        }
-        // หากค่า zero_streak > 3 ก็จะส่งข้อมูลปกติ
-      } else {
-        zero_streak = 0; // รีเซ็ตเมื่อมีค่าปกติ
-      }
-
       // Get the current time
       time_t now = time(nullptr);
       struct tm timeinfo;
@@ -376,13 +324,20 @@ void setup() {
       char timeStr[64];
       strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S+07", &timeinfo);
 
-      int sensor_id = 1;
+      // กำหนด sensor_id ที่จะใช้
+      // เนื่องจากลูป pzemSlaveAddr จะรันจาก 1 ถึง 2 (ไม่ถึง 3)
+      // ถ้าคุณต้องการส่งข้อมูลของ PZEM แต่ละตัวแยกกัน
+      // คุณอาจต้องให้ MQTT publish block อยู่ภายใน for loop
+      // และใช้ pzemSlaveAddr เป็น sensor_id
+      // แต่ถ้าคุณอยากส่งข้อมูลรวม หรือข้อมูลของ PZEM ตัวสุดท้ายที่อ่านได้
+      // แล้วใช้ sensor_id คงที่ หรือกำหนดเองได้
+      int sensor_id = 1; // ตัวอย่าง: กำหนด sensor_id เป็น 1 หรือตามที่ต้องการ
 
       // Build JSON payload
       char payload[256];
       snprintf(payload, sizeof(payload),
               "{\"time\": \"%s\", \"sensor_id\": %d, \"voltage\": %.2f, \"current\": %.2f, \"power\": %.2f, \"energy\": %.2f, \"hz\": %.2f, \"pf\": %.2f}",
-              timeStr, sensor_id, voltage, current, power, energy, hz, pf);
+              timeStr, sensor_id, voltage, current, power, energy, hz, pf); // <-- hz และ pf สามารถเข้าถึงได้แล้ว
 
       // Print to Serial Monitor
       Serial.println("Publishing data to MQTT:");
@@ -393,5 +348,4 @@ void setup() {
 
       lastPublish = millis();
     }
-}
-
+  }

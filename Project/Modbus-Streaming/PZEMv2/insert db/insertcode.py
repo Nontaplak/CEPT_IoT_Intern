@@ -3,7 +3,7 @@ import psycopg2
 import paho.mqtt.client as mqtt
 
 # PostgreSQL Connection
-CONNECTION = "postgres://postgres:password@localhost:30000/postgres"
+CONNECTION = "postgres://postgres:password@192.168.0.72:30000/postgres"
 insert_query = """
 INSERT INTO sensor_data (time, sensor_id, voltage, current, power, energy, hz, pf)
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -12,12 +12,12 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
 # MQTT Settings (Netpie)
 
 # MQTT Settings (Netpie)
-MQTT_BROKER = "broker.netpie.io"
+MQTT_BROKER = "192.168.0.72"
 MQTT_PORT = 1883
 MQTT_TOPIC = "@msg/sensor"
-MQTT_CLIENT = "d97def3d-de68-4c6e-83cd-394d2ebc1a18"
-MQTT_USER = "11Mn1dSEx2Ujjn9TM24732PGfBEHkgic"
-MQTT_PASS = "ZCdhpq9TUq3mre6bYKBSVDZqLKAcnxUf"
+MQTT_CLIENT = "receiver_emu"
+MQTT_USER = "receiver_emu"
+MQTT_PASS = "cept_chula"
 zero_counter = 0  # นับจำนวนครั้งที่ค่าทั้งหมดเป็นศูนย์
 # MQTT Callback
 def on_connect(client, userdata, flags, rc, properties=None):

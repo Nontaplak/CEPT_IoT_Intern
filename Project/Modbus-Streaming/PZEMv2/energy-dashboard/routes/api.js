@@ -5,7 +5,7 @@ const pool = require('../config/database');
 const { login, register, authenticate } = require('../middleware/auth');
 
 // MQTT setup
-const mqttClient = mqtt.connect('mqtt://mqtt.netpie.io', {
+const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   clientId: process.env.MQTT_CLIENT_ID,
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD
